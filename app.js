@@ -237,7 +237,10 @@ class HozoCollabApp {
     handleFileSelect(e) { if (e.target.files.length > 0) this.uploadFile(e.target.files[0]); }
 
     async uploadFile(file) {
-        if (!file.name.endsWith('.xml')) { alert('XMLファイルを選択してください'); return; }
+        if (!file.name.endsWith('.xml') && !file.name.endsWith('.ont')) {
+            alert('XMLファイルまたはONTファイルを選択してください');
+            return;
+        }
         if (!this.db) { alert('Firebaseが初期化されていません'); return; }
 
         try {
