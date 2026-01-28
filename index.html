@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>法造 同時編集 | Hozo Collaborative Editor</title>
+    <meta name="description" content="法造オントロジーエディタのリアルタイム同時編集システム">
+    <link rel="stylesheet" href="index.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <!-- ヘッダー -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon">🔷</span>
+                    <span class="logo-text">法造 Collab</span>
+                </div>
+                <span class="filename" id="filename">ファイル未選択</span>
+            </div>
+            <div class="header-center">
+                <div class="users-indicator" id="users-indicator"></div>
+            </div>
+            <div class="header-right">
+                <button class="btn btn-secondary" id="btn-download" disabled>
+                    <span class="btn-icon">💾</span>
+                    ダウンロード
+                </button>
+                <button class="btn btn-primary" id="btn-share">
+                    <span class="btn-icon">🔗</span>
+                    共有
+                </button>
+            </div>
+        </header>
+
+        <!-- メインコンテンツ -->
+        <main class="main">
+            <!-- サイドバー -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">概念一覧</h3>
+                    <div class="search-box">
+                        <input type="text" id="search-concepts" placeholder="概念を検索...">
+                    </div>
+                    <ul class="concept-list" id="concept-list"></ul>
+                </div>
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">ツール</h3>
+                    <div class="tool-buttons">
+                        <button class="tool-btn active" id="tool-select" title="選択"><span>🖱️</span></button>
+                        <button class="tool-btn" id="tool-add" title="概念追加"><span>➕</span></button>
+                        <button class="tool-btn" id="tool-connect" title="関係追加"><span>🔗</span></button>
+                        <button class="tool-btn" id="tool-delete" title="削除"><span>🗑️</span></button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- キャンバスエリア -->
+            <div class="canvas-container" id="canvas-container">
+                <!-- 初期画面 -->
+                <div class="welcome-screen" id="welcome-screen">
+                    <div class="welcome-content">
+                        <div class="welcome-icon">🔷</div>
+                        <h1>法造 同時編集システム</h1>
+                        <p>オントロジーファイルをアップロードして、リアルタイムで共同編集を始めましょう</p>
+
+                        <div class="upload-area" id="upload-area">
+                            <div class="upload-icon">📂</div>
+                            <p>XMLファイルをドラッグ＆ドロップ</p>
+                            <p class="upload-hint">または</p>
+                            <label class="btn btn-primary upload-btn">
+                                <input type="file" id="file-input" accept=".xml" hidden>
+                                ファイルを選択
+                            </label>
+                        </div>
+
+                        <div class="divider"><span>または</span></div>
+
+                        <div class="session-join">
+                            <input type="text" id="session-id-input" placeholder="セッションIDを入力">
+                            <button class="btn btn-secondary" id="btn-join-session">参加</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- オントロジーキャンバス -->
+                <svg class="ontology-canvas" id="ontology-canvas" style="display: none;">
+                    <defs>
+                        <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#667eea" />
+                        </marker>
+                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+                    <g id="canvas-content" transform="translate(0,0) scale(1)">
+                        <g id="isa-links"></g>
+                        <g id="concepts"></g>
+                        <g id="cursors"></g>
+                    </g>
+                </svg>
+
+                <!-- ズームコントロール -->
+                <div class="zoom-controls" id="zoom-controls" style="display: none;">
+                    <button class="zoom-btn" id="zoom-in">+</button>
+                    <span class="zoom-level" id="zoom-level">100%</span>
+                    <button class="zoom-btn" id="zoom-out">−</button>
+                    <button class="zoom-btn" id="zoom-fit">⊡</button>
+                </div>
+            </div>
+
+            <!-- 詳細パネル -->
+            <aside class="detail-panel" id="detail-panel">
+                <div class="detail-header">
+                    <h3>詳細</h3>
+                    <button class="close-btn" id="close-detail">×</button>
+                </div>
+                <div class="detail-content" id="detail-content">
+                    <p class="detail-placeholder">概念を選択してください</p>
+                </div>
+            </aside>
+        </main>
+
+        <!-- ユーザー名入力モーダル -->
+        <div class="modal" id="username-modal" style="display: none;">
+            <div class="modal-content">
+                <h2>ユーザー名を入力</h2>
+                <input type="text" id="username-input" placeholder="あなたの名前">
+                <button class="btn btn-primary" id="btn-set-username">開始</button>
+            </div>
+        </div>
+
+        <!-- 共有モーダル -->
+        <div class="modal" id="share-modal" style="display: none;">
+            <div class="modal-content">
+                <h2>セッションを共有</h2>
+                <p>このリンクを共有して、他のユーザーを招待できます</p>
+                <div class="share-link-box">
+                    <input type="text" id="share-link" readonly>
+                    <button class="btn btn-primary" id="btn-copy-link">コピー</button>
+                </div>
+                <button class="btn btn-secondary modal-close" id="close-share-modal">閉じる</button>
+            </div>
+        </div>
+
+        <!-- Firebase設定モーダル -->
+        <div class="modal" id="firebase-modal">
+            <div class="modal-content" style="max-width: 500px;">
+                <h2>🔥 Firebase設定</h2>
+                <p style="text-align: left; font-size: 13px;">
+                    Firebase Consoleで作成したプロジェクトの設定を入力してください。
+                    <a href="https://console.firebase.google.com/" target="_blank" style="color: #667eea;">Firebase
+                        Console</a>
+                </p>
+                <div style="text-align: left;">
+                    <div class="detail-field">
+                        <label>API Key</label>
+                        <input type="text" id="firebase-apiKey" placeholder="AIza...">
+                    </div>
+                    <div class="detail-field">
+                        <label>Database URL</label>
+                        <input type="text" id="firebase-databaseURL" placeholder="https://your-project.firebaseio.com">
+                    </div>
+                    <div class="detail-field">
+                        <label>Project ID</label>
+                        <input type="text" id="firebase-projectId" placeholder="your-project-id">
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="btn-save-firebase"
+                    style="width: 100%; margin-top: 16px;">設定を保存</button>
+                <p style="font-size: 11px; color: #606070; margin-top: 12px;">
+                    ※設定はブラウザに保存されます
+                </p>
+            </div>
+        </div>
+
+        <!-- ステータスバー -->
+        <footer class="status-bar">
+            <div class="status-left">
+                <span class="status-connection" id="status-connection">⚫ 未接続</span>
+            </div>
+            <div class="status-center">
+                <span id="status-info">法造 同時編集システム v1.0 (Firebase)</span>
+            </div>
+            <div class="status-right">
+                <span id="status-concepts">概念: -</span>
+                <span id="status-relations">関係: -</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
